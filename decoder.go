@@ -151,7 +151,7 @@ func (decoder *Decoder) decodeDiff(node *HuffmanNode) int {
 
 // decode bytes to int array. for dicom, cast each element to correct type
 // based on tag PixelRespresentation(0 for unsigned and 1 for signed) and BitsAllocated
-func DecodeSL(data []byte) []int {
+func Decode(data []byte) []int {
 	decoder := NewDecoder(data)
 	decoder.decodeHeader()
 
