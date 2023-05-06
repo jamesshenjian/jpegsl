@@ -149,9 +149,10 @@ func (decoder *Decoder) decodeDiff(node *HuffmanNode) int {
 	return diff
 }
 
-// decode bytes to int array. for dicom, cast each element to correct type
-// based on tag PixelRespresentation(0 for unsigned and 1 for signed) and BitsAllocated
-func Decode(data []byte) []int {
+// Decode bytes to int array. pass signed as true if the pixel value are signed and false otherwise
+// For dicom pixel data parsing, get the value of tag PixelRepresentation. 1 means signed and 0 means unsigned
+// Also check the tag PixelPaddingValue, which can be used to pad the image. Those pixels should be treated correctly
+func Decode(data []byte, signed bool) []int {
 	decoder := NewDecoder(data)
 	decoder.decodeHeader()
 
@@ -160,7 +161,12 @@ func Decode(data []byte) []int {
 	stripeSize := width
 
 	for i := 0; i < decoder.components; i++ {
-		imageArray[i] = decoder.decodeDiff(decoder.huffmanTreesSelected[i]) + (1 << (decoder.precision - 1))
+		imageArray[i] = decoder.decodeDiff(decoder.huffmanTreesSelected[i])
+		if !signed {
+			imageArray[i] += (1 << (decoder.precision - 1))
+		} else {
+			imageArray[i] -= (1 << (decoder.precision - 1))
+		}
 	}
 
 	for x := decoder.components; x < int(decoder.samples)*decoder.components; x += decoder.components {
