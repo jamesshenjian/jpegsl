@@ -2,6 +2,7 @@ package jpegsl
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 )
 
@@ -10,14 +11,15 @@ type Decoder struct {
 	dataStream           *bytes.Reader
 	huffmanTrees         map[byte]*HuffmanNode
 	huffmanTreesSelected map[int]*HuffmanNode
-	precision            byte
-	predictor            byte
-	lines                uint16
-	samples              uint16
-	components           int
-	componentIndex       map[byte]int
-	samplingFactorH      []byte
-	samplingFactorV      []byte
+
+	precision       byte
+	predictor       byte
+	lines           uint16
+	samples         uint16
+	components      int
+	componentIndex  map[byte]int
+	samplingFactorH []byte
+	samplingFactorV []byte
 }
 
 var MARKER_SOF3 uint16 = 0xffc3
@@ -43,19 +45,44 @@ func (decoder *Decoder) buildTree() int {
 	decoder.huffmanTrees[tableId] = NewHuffmanNode(decoder.bitstream)
 
 	codeLengthArray := make([]byte, 16)
+	vals := make([]byte, 16)
 
 	for i := 0; i < 16; i++ {
 		codeLengthArray[i] = read1Byte(decoder.dataStream)
 		tableLength += int(codeLengthArray[i])
 	}
 
+	k := 0
 	for i := 0; i < 16; i++ {
 		for j := 0; j < int(codeLengthArray[i]); j++ {
-			val := read1Byte(decoder.dataStream)
-			decoder.huffmanTrees[tableId].mostLeft(i + 1).value = int(val)
+			vals[k] = read1Byte(decoder.dataStream)
+			decoder.huffmanTrees[tableId].mostLeft(i + 1).value = int(vals[k])
+			k++
 		}
 	}
 
+	h := decoder.huffmanTrees[tableId]
+
+	var x, code uint32
+	for i := uint32(0); i < lutSize; i++ {
+		code <<= 1
+		for j := 0; j < int(codeLengthArray[i]); j++ {
+			// The codeLength is 1+i, so shift code by 8-(1+i) to
+			// calculate the high bits for every 8-bit sequence
+			// whose codeLength's high bits matches code.
+			// The high 8 bits of lutValue are the encoded value.
+			// The low 8 bits are 1 plus the codeLength.
+			base := uint8(code << (7 - i))
+			lutValue := uint16(vals[x])<<8 | uint16(2+i)
+			for k := uint8(0); k < 1<<(7-i); k++ {
+				h.lut[base|k] = lutValue
+			}
+			code++
+			x++
+		}
+	}
+
+	//fmt.Print(h.lut)
 	return tableLength + 17
 }
 
@@ -130,7 +157,11 @@ func (decoder *Decoder) decodeHeader() {
 }
 
 func (decoder *Decoder) decodeDiff(node *HuffmanNode) int {
-	length := node.decode()
+
+	length := node.decode(true)
+	if length < 0 {
+		fmt.Print(length)
+	}
 
 	if length == 0 {
 		return 0

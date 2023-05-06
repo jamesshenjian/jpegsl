@@ -2,13 +2,14 @@ package jpegsl
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 )
 
 type Bitstream struct {
 	dataStream   *bytes.Reader
 	bytePosition int
-	byteBuffer   byte
+	byteBuffer   uint16
 }
 
 func NewBitstream(data []byte) *Bitstream {
@@ -21,15 +22,31 @@ func NewBitstream(data []byte) *Bitstream {
 
 func (bs *Bitstream) bit() int {
 	if bs.bytePosition == 0 {
-		bs.byteBuffer = read1Byte(bs.dataStream)
-		if bs.byteBuffer == 0xff {
+		newByte := read1Byte(bs.dataStream)
+		if newByte == 0xff {
 			bs.dataStream.ReadByte()
 		}
-
+		bs.byteBuffer = bs.byteBuffer<<8 | uint16(newByte)
 		bs.bytePosition = 8
 	}
 	bs.bytePosition -= 1
 	return int((bs.byteBuffer >> bs.bytePosition) & 1)
+}
+
+func (bs *Bitstream) tryByte() int {
+	if bs.bytePosition < 8 {
+		newByte := read1Byte(bs.dataStream)
+		if newByte == 0xff {
+			bs.dataStream.ReadByte()
+		}
+		bs.byteBuffer = bs.byteBuffer<<8 | uint16(newByte)
+		bs.bytePosition += 8
+	}
+	return int((bs.byteBuffer >> (bs.bytePosition - 8)) & 0xFF)
+}
+
+func (bs *Bitstream) advance(n int) {
+	bs.bytePosition -= n
 }
 
 func min(a, b int) int {
@@ -65,12 +82,17 @@ func (bs *Bitstream) bits(length int) int {
 	nextLength := min(bs.bytePosition, length)
 	length -= nextLength
 	bs.bytePosition -= nextLength
+	if nextLength < 0 || bs.bytePosition < 0 {
+		fmt.Print(nextLength, " ", length, " ", bs.bytePosition)
+	}
+
 	currentBits := int(bs.byteBuffer>>bs.bytePosition) & int((1<<nextLength)-1)
 
 	for length > 0 {
-		bs.byteBuffer = read1Byte(bs.dataStream)
+		newByte := read1Byte(bs.dataStream)
+		bs.byteBuffer = bs.byteBuffer<<8 | uint16(newByte)
 
-		if bs.byteBuffer == 0xff {
+		if newByte == 0xff {
 			bs.dataStream.ReadByte()
 		}
 
