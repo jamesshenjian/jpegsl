@@ -2,7 +2,6 @@ package jpegsl
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 )
 
@@ -159,9 +158,6 @@ func (decoder *Decoder) decodeHeader() {
 func (decoder *Decoder) decodeDiff(node *HuffmanNode) int {
 
 	length := node.decode(true)
-	if length < 0 {
-		fmt.Print(length)
-	}
 
 	if length == 0 {
 		return 0
@@ -173,6 +169,8 @@ func (decoder *Decoder) decodeDiff(node *HuffmanNode) int {
 
 	diff := int(decoder.bitstream.bits(length))
 
+	//V(ariable) L(ength) I(nteger) encoding: for positive number, encode as itself start with highbit 1
+	//for negative number x, encoded as 2's compliment of -x
 	if (diff & (1 << (length - 1))) == 0 {
 		diff -= (1 << length) - 1
 	}
